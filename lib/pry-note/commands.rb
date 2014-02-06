@@ -13,26 +13,68 @@ Pry::Commands.create_command "note" do
   USAGE
 
   def subcommands(cmd)
-    cmd.on :add do |opt|
-      opt.on :m, "message", "Provide the note inline (without opening an editor).", :argument => true
+    cmd.command :add do |opt|
+      opt.on :m, :message, "Show the list of all available plugins", :argument => true
+
+      opt.run do |opts, args|
+        add_note(args.first, opts.to_h[:message])
+      end
     end
 
-    cmd.on :show  do |opt|
+    cmd.command :show  do |opt|
       opt.on :v, :verbose, "Show all notes together with source code."
+
+      opt.run do |opts, args|
+        Pry::Pager.page(create_note_output(args.first, opts.to_h[:verbose]))
+      end
     end
 
-    cmd.on :list do |opt|
+    cmd.command :list do |opt|
       opt.on :v, :verbose, "List all notes and content with source code."
-    end
-    cmd.on :export
-    cmd.on :load
-    cmd.on :delete do |opt|
-      opt.on :a, :all, "Delete all notes."
+
+      opt.run do |opts, args|
+        opts[:verbose] ? list_all : list_notes
+      end
     end
 
-    cmd.on :edit do |opt|
-      opt.on :m, "message", "Update the note inline (without opening an editor).", :argument => true
+    cmd.command :export do
+      run do |opts, args|
+        f = args.first
+        PryNote.export_notes(f)
+        output.puts "Exported notes to #{f}"
+      end
     end
+
+    cmd.command :load do
+      run do |opts, args|
+        PryNote.load_notes(args.first)
+      end
+    end
+
+    cmd.command :delete do |opt|
+      opt.on :a, :all, "Delete all notes."
+
+      opt.run do |opts, args|
+        if opts[:delete]
+          notes.replace({})
+          output.puts "Deleted all notes!"
+        else
+          delete_note(args.first)
+        end
+      end
+    end
+
+    cmd.command :edit do |opt|
+      opt.on :m, :message, "Update the note inline (without opening an editor).", :argument => true
+
+      opt.run do |opts, args|
+        reedit_note(args.first, opts.to_h[:message])
+      end
+    end
+  end
+
+  def process
+    binding.pry
   end
 
   def notes() PryNote.notes ||= {} end
@@ -52,43 +94,6 @@ Pry::Commands.create_command "note" do
 
   def code_object_name(co)
     PryNote.code_object_name(co)
-  end
-
-  def process
-    if opts.command?(:add)
-      cmd_opts = opts[:add]
-      add_note(opts.arguments.first, cmd_opts[:message])
-    elsif opts.command?(:show)
-      cmd_opts = opts[:show]
-      binding.pry
-      stagger_output create_note_output(opts.arguments.first, cmd_opts[:verbose])
-    elsif opts.command?(:list)
-      cmd_opts = opts[:list]
-      if cmd_opts.present?(:verbose)
-        list_all
-      else
-        list_notes
-      end
-    elsif opts.command?(:edit)
-      cmd_opts = opts[:edit]
-      reedit_note(opts.arguments.first, cmd_opts[:message])
-    elsif opts.command?(:export)
-      f = opts.arguments.first
-      PryNote.export_notes(f)
-      output.puts "Exported notes to #{f}"
-    elsif opts.command?(:delete)
-      cmd_opts = opts[:delete]
-      if cmd_opts.present?(:all)
-        notes.replace({})
-        output.puts "Deleted all notes!"
-      else
-        delete_note(opts.arguments.first)
-      end
-    elsif opts.command?(:load)
-      PryNote.load_notes(opts.arguments.first)
-    else
-      output.puts opts.to_s
-    end
   end
 
   def retrieve_code_object_safely(name)
